@@ -17,26 +17,65 @@ class Languages(models.Model):
         db_table = u'site_languages'
         app_label = ''
 
+REGISTRATIONTYPE = (
+    ('FB', 'Facebook'),
+    ('GOOGLE', 'Google'),
+    ('EMAIL', 'Email'),)
+
+OBJECTTYPES = (
+    ('PROFILE_PIC', 'ProfilePic'),
+    ('BACKGROUND_PIC', 'BackgroundPIC'),
+    ('EMAIL', 'Email'),)
+
+
+class GENDER():
+    MALE = 'male'
+    FEMALE = 'female'
+    OTHER = 'other'
+    CHOICES = (
+        (MALE, 'Male'),
+        (FEMALE, 'Female'),
+        (OTHER, 'Other'),
+    )
+
+PALSTATUSTYPE = (
+    ('PENDING', 'Pending'),
+    ('BLOCKED', 'Blocked'),
+    ('FRIENDS', 'Accepted'),)
+
+
 class UserProfile(models.Model):
-    # Aggregate using a OneToOneField on User
-    user = models.OneToOneField(User)
-    is_journalist = models.IntegerField(null=True, blank=True)
-    birth_date = models.DateField(null=True)
-    offline_magazine = models.CharField(max_length=150, null=True)
-    online_magazine = models.CharField(max_length=150, null=True)
-    tvname = models.CharField(max_length=150, null=True)
-    postal_code = models.PositiveIntegerField(null=True)
+    """
+    A model to store extra information for each user.
+    """
+    user = models.OneToOneField(User, related_name='profile')
+    gender = models.CharField(max_length=50, choices=GENDER.CHOICES)
+    birth_year = models.CharField(max_length=150, blank=True)
+    age = models.SmallIntegerField()
+    uuid_field = UUIDField()
     phone = models.CharField(max_length=150, blank=True)
     country = models.CharField(max_length=15, blank=True)
-    is_imageowner = models.IntegerField(default=False)
-    is_vip = models.IntegerField(default=False)
-    language = models.IntegerField(default=False)
-    created_by = models.IntegerField(default=False)
+    city = models.CharField(max_length=15, blank=True)
+    is_flag = models.BooleanField(default=False)
+    is_activated = models.BooleanField(default=True)
+    activation_code = models.CharField(max_length=65, blank=False)
+    #language = models.IntegerField(default=False)
     reset_code = models.TextField(null=True, blank=True)
     reset_status = models.IntegerField(null=True, blank=True)
+    lattitude = models.CharField(max_length=50, blank=True)
+    longitude = models.CharField(max_length=50, blank=True)
+    identifierforvendor = models.CharField(max_length=100, blank=True)
+    about_me = models.TextField(null=True, blank=True)    
+    registration_type = models.CharField(_('Provide User Type FB, GOOGLE, EMAIL'),
+                                 choices=REGISTRATIONTYPE, blank=True, null=True,
+                                 max_length=10)
     class Meta:
         app_label = ''
         db_table = u'userprofile'
+
+    def __str__(self):
+        return self.user.get_full_name()
+
 
 class Medialist(models.Model):
     id = models.IntegerField()
@@ -91,90 +130,6 @@ class UserLogs(models.Model):
         db_table = u'django_user_log'
         app_label = ''
 
-# Create your models here.
-class ImageStore(models.Model):
-    id = models.AutoField(primary_key=True)
-    type = models.CharField(max_length=20)
-    gs_object_name = models.CharField(max_length=1024)
-    content_type = models.CharField(max_length=100)
-    creation = models.DateTimeField()
-    filename = models.CharField(max_length=1024)
-    size = models.IntegerField()
-    md5 = models.CharField(max_length=100)
-    thumb_gs_object_name = models.TextField(null=True, blank=True)
-    user = models.ForeignKey(User)
-#    image = models.ImageField()
-
-    def imageUrl(self):
-        from google.appengine.api import blobstore, images
-        imgdat=""
-        try:
-            blob_key = blobstore.create_gs_key(self.gs_object_name)
-            imgdat=images.get_serving_url(blob_key)
-        except Exception, e:
-            logging.info('LoginfoMessage ImageID:: %s',self.gs_object_name)
-            logging.info('LoginfoMessage error:: %s',e)
-            imgdat=""
-#        image.execute_transforms(output_encoding=images.JPEG)
-#        return image.get_serving_url()
-        return imgdat
-    
-    def imageUrlKey(self):
-        from google.appengine.api import blobstore, images
-        imgdat=""
-        try:
-            blob_key = blobstore.create_gs_key(self.gs_object_name)
-            imgdat=images.get_serving_url(blob_key)
-        except Exception, e:
-            logging.info('LoginfoMessage ImageID:: %s',self.gs_object_name)
-            logging.info('LoginfoMessage error:: %s',e)
-            imgdat=""
-#        image.execute_transforms(output_encoding=images.JPEG)
-#        return image.get_serving_url()
-        return blob_key
-    
-    def fullimageUrl(self):
-        from google.appengine.api import blobstore, images
-        urlimg=""
-        try:
-            blob_key = blobstore.create_gs_key(self.gs_object_name)
-            urlimg = images.get_serving_url(blob_key, size=None, crop=False, secure_url=None)
-        except Exception, e:
-            logging.info('LoginfoMessage ImageID:: %s',self.gs_object_name)
-            logging.info('LoginfoMessage error:: %s',e)
-            urlimg=""
-#        image.execute_transforms(output_encoding=images.JPEG)
-#        return image.get_serving_url()
-        return urlimg
-    def imageresize(self):
-        
-        imgdat=""
-        try:
-            
-            imgdat=self.size/(1024*1000)
-            if imgdat < 1:
-                imgdat=1
-            else:
-                imgdat = imgdat
-        except Exception, e:
-            logging.info('LoginfoMessage ImageID:: %s',self.gs_object_name)
-            logging.info('LoginfoMessage error:: %s',e)
-            imgdat=""
-#        image.execute_transforms(output_encoding=images.JPEG)
-#        return image.get_serving_url()
-        return imgdat
-    def imageshortName(self):
-        import os
-        imgsht = ""
-        try:
-            fileNamed, fileExtension = os.path.splitext(filename)
-            imgsht=fileNamed
-        except Exception, e:
-            imgsht=""
-        return imgsht
-    class Meta:
-        app_label = ''
-        db_table = u'imagestore_imagestore'
 
 class StaticFiles(models.Model):
     id = models.AutoField(primary_key=True)
@@ -200,41 +155,6 @@ class StaticFiles(models.Model):
         app_label = ''
         db_table = u'staticfiles'
 
-class ImageContent(models.Model):
-    id = models.IntegerField()
-    img_id = models.IntegerField(null=False, blank=False)
-    file_name = models.CharField(max_length=150, null=True)
-    catid = models.IntegerField()
-    brand_name = models.CharField(max_length=150, null=True)
-    article_num = models.CharField(max_length=15, null=True)
-    short = models.TextField(blank=True)
-    long = models.TextField(blank=True)
-    website_brand = models.CharField(max_length=150, blank=True)
-    website_store = models.CharField(max_length=150, blank=True)
-    market_avail=models.CharField(max_length=150, blank=True)
-    copyright_avail=models.CharField(max_length=150, blank=True)
-    copyright_till=models.CharField(max_length=150, blank=True)
-    material = models.CharField(max_length=150, blank=True)
-    sizes = models.CharField(max_length=15, blank=True)
-    colorid = models.IntegerField()
-    price = models.CharField(max_length=15, blank=True)
-    language = models.IntegerField(null=True)
-    created_by = models.IntegerField(null=True)
-    created_time = models.DateTimeField(null=True, blank=True)
-    parent_lang = models.IntegerField(null=True)
-    image_Season = models.CharField(max_length=50, blank=True)
-    
-    def newprice(self):
-        newprice=float(self.price)
-        newprice2="%.2f" % newprice 
-        return newprice2
-    
-    class Meta:
-        app_label = ''
-        db_table = u'image_content'
-
-class ImageUploadForm(forms.Form):
-    type = forms.ChoiceField(choices=(('6', 'Sunday')))
 
 class Languages(models.Model):
     id = models.IntegerField()
@@ -302,48 +222,6 @@ class Admins(models.Model):
         app_label = ''
  
    
-class Category(models.Model):
-    id = models.IntegerField(primary_key=True)
-    category_name = models.CharField(max_length=450, blank=True)
-    category_description = models.TextField(blank=True)
-    category_main = models.IntegerField()
-    category_parent = models.IntegerField(null=True, blank=True)
-    category_header = models.TextField(blank=True)
-    category_footer = models.TextField(blank=True)
-    category_title = models.TextField(blank=True)
-    category_meta = models.TextField(blank=True)
-    sorting = models.IntegerField(null=True, blank=True)
-    numtolist = models.IntegerField(null=True, blank=True)
-    displaytype = models.IntegerField(null=True, blank=True)
-    columnum = models.IntegerField(null=True, blank=True)
-    iconimage = models.CharField(max_length=300, blank=True)
-    special_numtolist = models.IntegerField(null=True, blank=True)
-    special_displaytype = models.IntegerField(null=True, blank=True)
-    special_columnum = models.IntegerField(null=True, blank=True)
-    category_columnum = models.IntegerField(null=True, blank=True)
-    category_displaytype = models.IntegerField(null=True, blank=True)
-    related_displaytype = models.IntegerField(null=True, blank=True)
-    related_columnum = models.IntegerField(null=True, blank=True)
-    listing_displaytype = models.IntegerField(null=True, blank=True)
-    hide = models.IntegerField(null=True, blank=True)
-    category_defaultsorting = models.IntegerField(null=True, blank=True)
-    createdby = models.CharField(max_length=150, blank=True)
-    last_update = models.DateTimeField(null=True, blank=True)
-    itemicon = models.IntegerField(null=True, blank=True)
-    redirectto = models.CharField(max_length=450, blank=True)
-    accessgroup = models.CharField(max_length=750, blank=True)
-    link = models.TextField(blank=True)
-    link_target = models.CharField(max_length=150, blank=True)
-    upsellitems_displaytype = models.IntegerField(null=True, blank=True)
-    upsellitems_columnum = models.IntegerField(null=True, blank=True)
-    filename = models.CharField(max_length=765, blank=True)
-    category_country = models.CharField(max_length=20, blank=True)
-    isfilter = models.IntegerField(null=True, db_column='isFilter', blank=True) # Field name made lowercase.
-    keywords = models.TextField(blank=True)
-    parent_lang = models.IntegerField(null=True,)
-    class Meta:
-        app_label = ''
-        db_table = u'category'
 
 class GlobalTextsContent(models.Model):
     id = models.IntegerField()
@@ -429,45 +307,6 @@ class Html(models.Model):
         db_table = u'html'
         app_label = ''
 
-# Create your models here.
-class ImageStore2(models.Model):
-    id = models.AutoField(primary_key=True)
-    type = models.CharField(max_length=20)
-    gs_object_name = models.CharField(max_length=1024)
-    content_type = models.CharField(max_length=100)
-    creation = models.DateTimeField()
-    filename = models.CharField(max_length=1024)
-    size = models.IntegerField()
-    md5 = models.CharField(max_length=100)
-    user = models.ForeignKey(User)
-    class Meta:
-        db_table = u'imagestore_imagestore'
-        app_label = ''
-    def imageUrl(self):
-        from google.appengine.api import blobstore, images
-        imgurl = ""
-        try:
-            #blob_reader = blobstore.BlobReader(self.gs_object_name)
-            #imgurl = images.Image(blob_reader.read())
-            logging.info('Key NAme %s \n\n',self.gs_object_name)
-            blob_key = blobstore.create_gs_key(self.gs_object_name)
-            imgurl=images.get_serving_url(blob_key)
-        except Exception, e:
-            imgurl=""
-        return imgurl
-    def fullimageUrl(self):
-        from google.appengine.api import blobstore, images
-        urlimg=""
-        try:
-            blob_key = blobstore.create_gs_key(self.gs_object_name)
-            urlimg = get_serving_url(blob_key, size=None, crop=False, secure_url=None)
-        except Exception, e:
-            logging.info('LoginfoMessage ImageID:: %s',self.gs_object_name)
-            logging.info('LoginfoMessage error:: %s',e)
-            urlimg=""
-#        image.execute_transforms(output_encoding=images.JPEG)
-#        return image.get_serving_url()
-        return urlimg
 
 class ProductCategory(models.Model):
     id = models.IntegerField()
