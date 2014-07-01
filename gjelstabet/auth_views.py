@@ -1,18 +1,27 @@
 from django.contrib.auth import *
 from django.contrib.auth.models import User
 from django.http import *
-from forms import *
+from gjelstabet.forms import LoginForm
 from django.template.loader import get_template
-from django.template import Context
+from django.template import Context, RequestContext
 from django.utils.decorators import method_decorator
 from django.shortcuts import render_to_response
 from django.contrib.auth.decorators import login_required
 from django.views.generic.base import TemplateView, View
 from django.views.decorators.csrf import csrf_exempt
 import logging, random, hashlib, datetime
-from models import *
+from gjelstabet.models import *
 from django.core.context_processors import csrf
 
+@csrf_exempt
+def render_template(request, template, data=None):
+    errs =""
+    if request.method == 'GET' and 'err' in request.GET:
+        data.update({'errs':request.GET['err']})
+    
+    response = render_to_response(template, data,
+                              context_instance=RequestContext(request))
+    return response
 
 def GetRecaptcha(request):
     value = random.randrange(10000, 99999, 1)
@@ -20,13 +29,13 @@ def GetRecaptcha(request):
     return value
 
 @csrf_exempt
-def CustomerLoginClass(request):
+def CustomerLoginClass1(request):
     if request.method == 'POST':
         if 'target' in request.POST:
             target_page = request.POST['target']
         else:
             target_page = "/"
-        #logout(request)
+        logout(request)
         customer_list=""
         form = LoginForm(request.POST)
         if form.is_valid():
@@ -43,15 +52,7 @@ def CustomerLoginClass(request):
                     else:
                         logging.info('Remember Me not here')
                     login(request, user)
-                    customer_list = UserProfile.objects.get(user_id = request.user)
-                    cuser = request.user
-                    chmsg=request.user.first_name+' '+request.user.last_name+' Has Logged into the system'
-                    logging.info('user ID == %s',request.user )
-                    ss = UserLogs(content_type_id = '3', user_id = cuser.id,object_repr='login',
-                                 object_id = 'Logged In', change_message=chmsg,action_flag=2,
-                                 action_time = datetime.datetime.now())
-                    ss.save()
-                    request.session['Customer'] = customer_list
+
                     return HttpResponseRedirect('/')
                 else:
                     request.session['ErrorMessage'] = "account does not exist"
@@ -71,9 +72,10 @@ def CustomerLoginClass(request):
 
 class LoginPageClass(TemplateView):
     def get(self, request, *args, **kwargs):
-        content = {'page_title': "Login"}
+        content = {'page_title': "Login",'form': LoginForm(),}
         return render_template(request, "login.html", content)
 
-def logout_view(request):
-    logout(request)
-    return HttpResponseRedirect('/login')
+class LogoutClass(TemplateView):
+    def get(self, request, *args, **kwargs):
+        logout(request)
+        return HttpResponseRedirect('/login')

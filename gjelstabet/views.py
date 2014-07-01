@@ -31,7 +31,29 @@ import time
 from django.core.urlresolvers import resolve
 from decimal import Decimal
 import os
+import requests
+from requests.auth import HTTPBasicAuth
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+
 PERPAGE=50
+USERID = 'gjelstabet'
+PSWD = '8678y7u7'
+FEED_URL = 'http://xml2.txodds.com/feed/odds/xml.php'
+AVGFEED_URL = 'http://xml2.txodds.com/feed/average/xml.php'
+BOOKMAKER_URL= 'http://xml2.txodds.com/feed/books.php?active=1'
+ODDTYPES_URL= 'http://xml2.txodds.com/feed/odds_types.php'
+SPORTS_URL = 'http://xml2.txodds.com/feed/sports.php'
+
+def fetchurl(type):
+    if type == "oddtypes":
+        urlto = ODDTYPES_URL
+    else:
+        urlto = FEED_URL
+    values = {"ident":USERID,"passwd":PSWD}
+    resp = requests.get(urlto, params=values)
+    return resp
+    
 
 def to_decimal(float_price):
     return Decimal('%.2f' % float_price)
@@ -84,33 +106,89 @@ def render_template(request, template, data=None):
     return response
 
 class HomePageClass(TemplateView):
-    def get(self, request, *args, **kwargs):
-                   
+    def get(self, request, *args, **kwargs):        
         content = {'page_title': "Welcome"}
         return render_template(request, "index.html", content)
-   
+
+class FeaturesPageClass(TemplateView):
+    def get(self, request, *args, **kwargs):        
+        content = {'page_title': "EDGEBET :: Features"}
+        return render_template(request, "portfolio_item.html", content)
+
+class ContactPageClass(TemplateView):
+    def get(self, request, *args, **kwargs):        
+        content = {'page_title': "EDGEBET :: Features"}
+        return render_template(request, "page_contacts.html", content)
+
+
 class RegistrationViewClass(TemplateView):
     def get(self, request, *args, **kwargs):
-        content = {'title': "User Registration",
-                   'regform':RegistrationForm,}
-        return render_template(request, "registration1.html", content)
+        if 'pid' in request.GET and request.GET['pid'] != "":
+            prices = Pricing.objects.get(id=request.GET['pid'])
+            content = {'title': "User Registration",'prices':prices,
+                       'regform':RegistrationForm,'pid':request.GET['pid']}
+            return render_template(request, "page_signup.html", content)
+        else:
+            return HttpResponseRedirect('/prices')
 
-class QuickListClass(TemplateView):
-    def get(self, request, *args, **kwargs):
-        cat = request.GET['cat'] if 'cat' in request.GET else 15
-        content = {'title': "Quick List",'cat': cat,}
-         
-        return render_template(request, "quick_list.htm", content)
+class RegistrationActionClass(TemplateView):
+    def post(self, request, *args, **kwargs):
+        pid = request.POST['pid']
+        try:
+            form = RegistrationForm(request.POST)
+            if form.is_valid():
+                profileform = form.save(request)
+                content = {'page_title': "Success",}
+                return render_template(request, "success.html", content)
+            else:
+                form_errors = form.errors
+                content = {'page_title': "User Registration",
+                           'regform':RegistrationForm, 'pid':pid}
+                return render_template(request, "success.html", content)
+        except Exception, e:
+            logging.info('LoginfoMessage now:: %s',e)
+            return HttpResponse(e)
+            #return HttpResponseRedirect('/signup?pid='+pid+'&err=Form Field Errors')
 
-class ViewCategoryClass(TemplateView):
+class CustomerLoginClass(TemplateView):
+    def post(self, request, *args, **kwargs):
+        logout(request)
+        customer_list=""
+        form = LoginForm(request.POST)
+        if form.is_valid():
+            logging.info('Form Is clean')
+            username = request.POST['username']
+            password = request.POST['password']
+            #logging.info('Remember Me not here %s %s',username,password)
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                if user.is_active and (not user.is_superuser and not user.is_staff):
+                    if request.POST.has_key('remember'):
+                        logging.info('Remember Me increased to 5 days')
+                        request.session.set_expiry(1209600)
+                    else:
+                        logging.info('Remember Me not here')
+                    login(request, user)
+
+                    return HttpResponseRedirect('/myaccount')
+                else:
+                    request.session['ErrorMessage'] = "account does not exist"
+                    return HttpResponseRedirect('/login')
+                success = True
+                logging.info('LoginfoMessage:: %s',username)
+                return HttpResponseRedirect(target_page)
+            else:
+                request.session['ErrorMessage'] = "Invalid Username or Password."
+                return HttpResponseRedirect('/login')
+        else:
+            request.session['ErrorMessage'] = "Invalid Form data."
+            return HttpResponseRedirect('/login')
+
+class PricesViewClass(TemplateView):
     def get(self, request, *args, **kwargs):
-        cat = request.GET['id'] if 'id' in request.GET else 3
-        category = Category.objects.get(id=cat)
-        categoryid, category_name, parent_id = BreadParentCategory(cat)
-        content = {'title': "Quick List",'catparent':category_name,
-                   'cat': category,}
-         
-        return render_template(request, "category.htm", content)
+        prices = Pricing.objects.filter(status=1)
+        content = {'title': "Prices",'prices':prices}
+        return render_template(request, "page_prices.html", content)
 
 class MyaccountViewClass(LoginRequiredMixin,TemplateView):
     def get(self, request, *args, **kwargs):
@@ -120,9 +198,146 @@ class MyaccountViewClass(LoginRequiredMixin,TemplateView):
         userprofiles= UserProfile.objects.get(user_id = request.user.id)
         content = {'page_title': "Edit Profile",'regform':RegistrationForm,
                    'countries':countries,'userprofiles':userprofiles}
-        return render_template(request, "myaccount.html", content)
+        return render_template(request, "user_templates/index.html", content)
     def post(self, request, *args, **kwargs):
         pass
+
+
+class OddtypesViewClass(LoginRequiredMixin,TemplateView):
+    def get(self, request, *args, **kwargs):
+        sidevalues=""
+        oddnum = ""
+        resp = requests.get(ODDTYPES_URL)
+        xmldoc = minidom.parseString(resp.text)
+        itemlist = xmldoc.getElementsByTagName('type')
+        for s in itemlist:
+            #print s.getElementsByTagName("name")[0].childNodes[0].data
+            oddnum = str(s.getElementsByTagName("ot")[0].childNodes[0].data)
+            sidevalues += '<li><a data-toggle="tab" href="javascript:;" onClick="datastream('+oddnum+');">'
+            sidevalues += '<i class="fa fa-eye"></i> '+str(s.getElementsByTagName("name")[0].childNodes[0].data)+'</a></li>'
+        content = {'page_title': "Odd Types",'sidevalues':sidevalues}
+        return render_template(request, "odd_types.html", content)
+
+class FeedsViewClass(LoginRequiredMixin,TemplateView):
+    def get(self, request, *args, **kwargs):
+        sidevalues=""
+        values = {"ident":USERID,"passwd":PSWD,
+                  'ot':request.GET['ot']}
+        resp = requests.get(FEED_URL, params=values)
+        
+        xmldoc = minidom.parseString(resp.text.encode('utf-8'))
+        itemlist = xmldoc.getElementsByTagName('match')
+        matchname = ""
+        last = 0
+        for s in itemlist:
+            matchname = str(s.getElementsByTagName("group")[0].childNodes[0].data).encode('utf8')
+            countries =s.getElementsByTagName("hteam")[0].childNodes[0].data.encode('utf-8').decode('utf-8')+' vs '
+            
+            countries += s.getElementsByTagName("ateam")[0].childNodes[0].data.encode('utf-8').decode('utf-8')
+            sidevalues += '<tr><th align=left colspan=9> '+matchname+' <span style="float:right"> '+countries+'</span></th></tr>'
+            for n in s.getElementsByTagName("bookmaker"):
+                sidevalues += '<tr><td class="active">'+n.getAttribute('name')+'</td>'
+               
+                for k in n.getElementsByTagName("odds"):
+                    sidevalues += '<td>&nbsp;</td>'
+                    sidevalues += '<td class="success">'+k.getElementsByTagName("o1")[0].childNodes[0].data+'</td>'
+                    sidevalues += '<td class="warning">'+k.getElementsByTagName("o2")[0].childNodes[0].data+'</td>'
+                    sidevalues += '<td class="danger">'+k.getElementsByTagName("o3")[0].childNodes[0].data+'</td>'
+                    
+                    #for j in k.getElementsByTagName("o1"):
+                        #sidevalues += '<td class="success">'+j.childNodes[0].data+'</td>'
+                        #sidevalues += '<td class="success">'+j.childNodes[1].data+'</td>'
+                        #sidevalues += '<td class="success">'+j.childNodes[2].data+'</td>'
+                sidevalues += '</tr>'
+        content = {'page_title': "Odd Types",'sidevalues':sidevalues.encode('utf8')}
+        return render_template(request, "oddstable.html", content)
+
+class SportFeedsViewClass(LoginRequiredMixin,TemplateView):
+    def get(self, request, *args, **kwargs):
+        sidevalues=""
+        values = {"ident":USERID,"passwd":PSWD,
+                  'spid':request.GET['spid']}
+        resp = requests.get(FEED_URL, params=values)
+        
+        xmldoc = minidom.parseString(resp.text.encode('utf-8'))
+        itemlist = xmldoc.getElementsByTagName('match')
+        matchname = ""
+        last = 0
+        for s in itemlist:
+            matchname = str(s.getElementsByTagName("group")[0].childNodes[0].data).encode('utf8')
+            #countries = str(s.getElementsByTagName("hteam")[0].childNodes[0].data)+' vs '+str(s.getElementsByTagName("ateam")[0].childNodes[0].data)
+            countries =s.getElementsByTagName("hteam")[0].childNodes[0].data.encode('utf-8').decode('utf-8')+' vs '
+            countries += s.getElementsByTagName("ateam")[0].childNodes[0].data.encode('utf-8').decode('utf-8')
+            sidevalues += '<tr><th align=left colspan=9> '+matchname+' <span style="float:right"> '+countries+'</span></th></tr>'
+            for n in s.getElementsByTagName("bookmaker"):
+                sidevalues += '<tr><td class="active">'+n.getAttribute('name')+'</td>'
+                for k in n.getElementsByTagName("odds"):
+                    sidevalues += '<td>&nbsp;</td>'
+                    sidevalues += '<td class="success">'+k.getElementsByTagName("o1")[0].childNodes[0].data+'</td>'
+                    sidevalues += '<td class="warning">'+k.getElementsByTagName("o2")[0].childNodes[0].data+'</td>'
+                    sidevalues += '<td class="danger">'+k.getElementsByTagName("o3")[0].childNodes[0].data+'</td>'
+                sidevalues += '</tr>'
+        content = {'page_title': "Odd Types",'sidevalues':sidevalues.encode('utf8')}
+        return render_template(request, "oddstable.html", content)
+
+class SporttypesViewClass(LoginRequiredMixin,TemplateView):
+    def get(self, request, *args, **kwargs):
+        sidevalues=""
+        oddnum = ""
+        resp = requests.get(SPORTS_URL)
+        xmldoc = minidom.parseString(resp.text)
+        itemlist = xmldoc.getElementsByTagName('sport')
+        for s in itemlist:
+            #print s.getElementsByTagName("name")[0].childNodes[0].data
+            oddnum = str(s.getElementsByTagName("id")[0].childNodes[0].data)
+            sidevalues += '<li><a data-toggle="tab" href="javascript:;" onClick="datastream('+oddnum+');">'
+            sidevalues += '<i class="fa fa-eye"></i> '+str(s.getElementsByTagName("name")[0].childNodes[0].data)+'</a></li>'
+        content = {'page_title': "Odd Types",'sidevalues':sidevalues}
+        return render_template(request, "sport_types.html", content)
+
+class BookmakertypesViewClass(LoginRequiredMixin,TemplateView):
+    def get(self, request, *args, **kwargs):
+        sidevalues=""
+        oddnum = ""
+        resp = requests.get(BOOKMAKER_URL)
+        xmldoc = minidom.parseString(resp.text)
+        itemlist = xmldoc.getElementsByTagName('bookmaker')
+        for s in itemlist:
+            oddnum = str(s.getAttribute('name'))
+            booknum = str(s.getAttribute('id'))
+            sidevalues += '<li><a data-toggle="tab" href="javascript:;" onClick="datastream('+booknum+');">'
+            sidevalues += '<i class="fa fa-eye"></i> '+str(oddnum)+'</a></li>'
+        content = {'page_title': "Odd Types",'sidevalues':sidevalues}
+        return render_template(request, "bookmaker_types.html", content)
+
+class BookmakerFeedsViewClass(LoginRequiredMixin,TemplateView):
+    def get(self, request, *args, **kwargs):
+        sidevalues=""
+        values = {"ident":USERID,"passwd":PSWD,
+                  'bid':request.GET['bid']}
+        resp = requests.get(FEED_URL, params=values)
+        
+        xmldoc = minidom.parseString(resp.text.encode('utf-8'))
+        itemlist = xmldoc.getElementsByTagName('match')
+        matchname = ""
+        last = 0
+        for s in itemlist:
+            matchname = str(s.getElementsByTagName("group")[0].childNodes[0].data).encode('utf8')
+            #countries = str(s.getElementsByTagName("hteam")[0].childNodes[0].data)+' vs '+str(s.getElementsByTagName("ateam")[0].childNodes[0].data)
+            countries =s.getElementsByTagName("hteam")[0].childNodes[0].data.encode('utf-8').decode('utf-8')+' vs '
+            countries += s.getElementsByTagName("ateam")[0].childNodes[0].data.encode('utf-8').decode('utf-8')
+            sidevalues += '<tr><th align=left colspan=9> '+matchname+' <span style="float:right"> '+countries+'</span></th></tr>'
+            for n in s.getElementsByTagName("bookmaker"):
+                sidevalues += '<tr><td class="active">'+n.getAttribute('name')+'</td>'
+                for k in n.getElementsByTagName("odds"):
+                    sidevalues += '<td>&nbsp;</td>'
+                    sidevalues += '<td class="success">'+k.getElementsByTagName("o1")[0].childNodes[0].data+'</td>'
+                    sidevalues += '<td class="warning">'+k.getElementsByTagName("o2")[0].childNodes[0].data+'</td>'
+                    sidevalues += '<td class="danger">'+k.getElementsByTagName("o3")[0].childNodes[0].data+'</td>'
+                sidevalues += '</tr>'
+        content = {'page_title': "Odd Types",'sidevalues':sidevalues.encode('utf8')}
+        return render_template(request, "oddstable.html", content)
+
 
 class ChangePwdViewClass(LoginRequiredMixin, TemplateView):
     @csrf_exempt

@@ -36,7 +36,7 @@ DATABASES = {
         'NAME': 'gjelstabet',
         'USER': 'postgres',
         'PASSWORD': '',
-        'HOST': 'localhost',
+        'HOST': '188.226.230.73',
         'PORT': '5432',
     }
 }

@@ -1,12 +1,13 @@
 from django import forms
 from django.forms import ModelForm
-from models import UserProfile, User, ShippingCountries, Languages
+from models import UserProfile
+from django.contrib.auth.models import User
 import logging
 from django.contrib.auth import authenticate, login
 
 
 class LoginForm(forms.Form):
-    username = forms.CharField(widget=forms.TextInput(attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Username'}),max_length = 50)
+    username = forms.CharField(widget=forms.TextInput(attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Email Address'}),max_length = 50)
     password = forms.CharField(widget=forms.PasswordInput(render_value=False,attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Password'}), max_length=50)
     recaptcha = forms.CharField(max_length = 50, required=False,widget=forms.TextInput(attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Enter Above Number'}))
     
@@ -102,7 +103,7 @@ class RegistrationForm(forms.Form):
   password = forms.CharField(widget=forms.PasswordInput(render_value=False,attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Password'}), max_length=50)
   cpassword = forms.CharField(widget=forms.PasswordInput(render_value=False,attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Confirm Password'}), max_length=50)
   phone = forms.CharField(widget=forms.TextInput(attrs={'class' : 'form-control', 'autocomplete':'OFF', 'placeholder':'Phone'}),max_length = 50, required=False)
-  country =  forms.ChoiceField(choices=[ (o.id, o.name) for o in ShippingCountries.objects.all().filter(enabled=1)], initial='USA',widget=forms.Select(attrs={'class' : 'form-control', 'autocomplete':'OFF'}))
+  #country =  forms.ChoiceField(choices=[ (o.id, o.name) for o in ShippingCountries.objects.all().filter(enabled=1)], initial='USA',widget=forms.Select(attrs={'class' : 'form-control', 'autocomplete':'OFF'}))
   
   def __init__(self, *args, **kwargs):
       super(RegistrationForm, self).__init__(*args, **kwargs)
@@ -122,29 +123,23 @@ class RegistrationForm(forms.Form):
       user.email = self.cleaned_data['email']
       user.save()
       if self.cleaned_data['password'] != '':
-          user = authenticate(username=user.username, password=self.cleaned_data['password'])
-        
+          user = authenticate(username=self.cleaned_data['email'], password=self.cleaned_data['password'])
       userprofile = UserProfile()
       userprofile.user = user
-      userprofile.is_journalist = 1
       userprofile.phone = self.cleaned_data['phone']
-      userprofile.offline_magazine = self.cleaned_data['offline_magazine']
-      userprofile.online_magazine = self.cleaned_data['online_magazine']
-      userprofile.tvname = self.cleaned_data['tvname']
-      userprofile.language = self.cleaned_data['languages']
       userprofile.save()
       
-      mail.send_mail(sender="support <accounts@example.com>",
-                     to="PrMediaStore.com Support <accounts@prmediastore.com>",
-                     subject=user.first_name+" "+user.last_name+"<"+user.email+"> Account Registration",
-                     body="""
-                     Greetings:
-                     We would like to thank you for registering with PR Media Store. We hope you enjoy 
-                     our service and please do let us know any suggestion you might have either via 
-                     sales@prmediastore.com or our website. 
-                     Thank you and have a nice day ! 
-                     Your PR Media Store Team
-                     """)
+      #mail.send_mail(sender="support <accounts@example.com>",
+      #               to="gjelstabet.com Support <accounts@gjelstabet.com>",
+      #               subject=user.first_name+" "+user.last_name+"<"+user.email+"> Account Registration",
+      #               body="""
+      #               Greetings:
+      #               We would like to thank you for registering with gjelstabet. We hope you enjoy 
+      #               our service and please do let us know any suggestion you might have either via 
+      #               sales@gjelstabet.com or our website. 
+      #               Thank you and have a nice day ! 
+      #               Your PR Media Store Team
+      #               """)
       return userprofile
 
 
